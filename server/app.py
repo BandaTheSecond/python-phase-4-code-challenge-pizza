@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 from models import db, Restaurant, RestaurantPizza, Pizza
 from flask_migrate import Migrate
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 from flask_restful import Api, Resource
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE = os.environ.get("DB_URI", f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}")
+DATABASE = os.environ.get(
+    "DB_URI", f"sqlite:///{os.path.join(BASE_DIR, 'app.db')}")
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE
@@ -23,6 +24,62 @@ api = Api(app)
 @app.route("/")
 def index():
     return "<h1>Code challenge</h1>"
+
+
+# Restaurant routes
+@app.route("/restaurants", methods=["GET"])
+def get_restaurants():
+    restaurants = Restaurant.query.all()
+    return jsonify([restaurant.to_dict() for restaurant in restaurants])
+
+
+@app.route("/restaurants/<int:id>", methods=["GET"])
+def get_restaurant(id):
+    restaurant = db.session.get(Restaurant, id)
+    if not restaurant:
+        return jsonify({"error": "Restaurant not found"}), 404
+    # Include restaurant_pizzas for individual restaurant
+    restaurant_dict = restaurant.to_dict()
+    restaurant_dict['restaurant_pizzas'] = [rp.to_dict()
+                                            for rp in restaurant.restaurant_pizzas]
+    return jsonify(restaurant_dict)
+
+
+@app.route("/restaurants/<int:id>", methods=["DELETE"])
+def delete_restaurant(id):
+    restaurant = db.session.get(Restaurant, id)
+    if not restaurant:
+        return jsonify({"error": "Restaurant not found"}), 404
+
+    db.session.delete(restaurant)
+    db.session.commit()
+    return "", 204
+
+
+# Pizza routes
+@app.route("/pizzas", methods=["GET"])
+def get_pizzas():
+    pizzas = Pizza.query.all()
+    return jsonify([pizza.to_dict() for pizza in pizzas])
+
+
+# RestaurantPizza routes
+@app.route("/restaurant_pizzas", methods=["POST"])
+def create_restaurant_pizza():
+    try:
+        data = request.get_json()
+        restaurant_pizza = RestaurantPizza(
+            price=data["price"],
+            pizza_id=data["pizza_id"],
+            restaurant_id=data["restaurant_id"]
+        )
+        db.session.add(restaurant_pizza)
+        db.session.commit()
+        return jsonify(restaurant_pizza.to_dict()), 201
+    except ValueError as e:
+        return jsonify({"errors": ["validation errors"]}), 400
+    except Exception as e:
+        return jsonify({"errors": ["validation errors"]}), 400
 
 
 if __name__ == "__main__":
